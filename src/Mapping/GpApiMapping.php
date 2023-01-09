@@ -344,10 +344,10 @@ class GpApiMapping
         $summary->orderId = $response->order_reference ?? null;
         if (isset($response->system)) {
             $system = $response->system;
-            $summary->merchantId = $system->mid;
-            $summary->merchantHierarchy = $system->hierarchy;
-            $summary->merchantName = $system->name;
-            $summary->merchantDbaName = $system->dba;
+            $summary->merchantId = $system->mid ?? null;
+            $summary->merchantHierarchy = $system->hierarchy ?? null;
+            $summary->merchantName = $system->name ?? null;
+            $summary->merchantDbaName = $system->dba ?? null;
         }
         if (isset($response->payment_method)) {
             $paymentMethod = $response->payment_method;
