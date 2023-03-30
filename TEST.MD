@@ -1,1 +1,1 @@
-Test for Magento Cloud
+Test for Magento Cloud2
