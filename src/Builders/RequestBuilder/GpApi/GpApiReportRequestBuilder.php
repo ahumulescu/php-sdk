@@ -7,8 +7,6 @@ use GlobalPayments\Api\Builders\ReportBuilder;
 use GlobalPayments\Api\Builders\TransactionReportBuilder;
 use GlobalPayments\Api\Entities\Enums\GatewayProvider;
 use GlobalPayments\Api\Entities\Enums\ReportType;
-use GlobalPayments\Api\Entities\Enums\TransactionModifier;
-use GlobalPayments\Api\Entities\Enums\TransactionType;
 use GlobalPayments\Api\Entities\GpApi\GpApiRequest;
 use GlobalPayments\Api\Entities\IRequestBuilder;
 use GlobalPayments\Api\Mapping\EnumMapping;
@@ -54,6 +52,7 @@ class GpApiReportRequestBuilder implements IRequestBuilder
                 $verb = 'GET';
                 $this->addBasicParams($queryParams, $builder);
                 $queryParams['account_name'] = $config->accessTokenInfo->dataAccountName;
+                $queryParams['account_id'] = $config->accessTokenInfo->dataAccountID;
                 $queryParams['order_by'] = $builder->depositOrderBy;
                 $queryParams['order'] = $builder->order;
                 $queryParams['amount'] = StringUtils::toNumeric($builder->searchBuilder->amount);
@@ -88,7 +87,8 @@ class GpApiReportRequestBuilder implements IRequestBuilder
                     'risk_assessment_result' => EnumMapping::mapFraudFilterResult(
                         GatewayProvider::GP_API,
                         $builder->searchBuilder->riskAssessmentResult),
-                    'risk_assessment_reason_code' => $builder->searchBuilder->riskAssessmentReasonCode
+                    'risk_assessment_reason_code' => $builder->searchBuilder->riskAssessmentReasonCode,
+                    'provider' => $builder->searchBuilder->paymentProvider,
                 ];
 
                 $this->addBasicParams($queryParams, $builder);
@@ -99,6 +99,7 @@ class GpApiReportRequestBuilder implements IRequestBuilder
                 $verb = 'GET';
                 $this->addBasicParams($queryParams, $builder);
                 $queryParams['account_name'] = $config->accessTokenInfo->dataAccountName;
+                $queryParams['account_id'] = $config->accessTokenInfo->dataAccountID;
                 $queryParams['deposit_status'] = $builder->searchBuilder->depositStatus;
                 $queryParams['arn'] = $builder->searchBuilder->aquirerReferenceNumber;
                 $queryParams['deposit_id'] = $builder->searchBuilder->depositId;
@@ -138,6 +139,7 @@ class GpApiReportRequestBuilder implements IRequestBuilder
                 $verb = 'GET';
                 $this->addBasicParams($queryParams, $builder);
                 $queryParams['account_name'] = $config->accessTokenInfo->dataAccountName;
+                $queryParams['account_id'] = $config->accessTokenInfo->dataAccountID;
                 $queryParams = array_merge($queryParams, $this->getDisputesParams($builder));
                 break;
             case ReportType::FIND_STORED_PAYMENT_METHODS_PAGED:
@@ -152,6 +154,7 @@ class GpApiReportRequestBuilder implements IRequestBuilder
                     ];
                     $payload = [
                         'account_name' => $config->accessTokenInfo->tokenizationAccountName,
+                        'account_id' => $config->accessTokenInfo->tokenizationAccountID,
                         'reference' => $builder->searchBuilder->referenceNumber,
                         'card' => !empty($card) ? $card : null
                     ];

@@ -1,6 +1,6 @@
 <?php
 
-namespace GlobalPayments\Api\Tests\Integration\Gateways\GpApiConnector;
+namespace Gateways\GpApiConnector;
 
 use GlobalPayments\Api\Entities\Address;
 use GlobalPayments\Api\Entities\Customer;
@@ -10,7 +10,6 @@ use GlobalPayments\Api\Entities\Enums\BNPLShippingMethod;
 use GlobalPayments\Api\Entities\Enums\BNPLType;
 use GlobalPayments\Api\Entities\Enums\Channel;
 use GlobalPayments\Api\Entities\Enums\CustomerDocumentType;
-use GlobalPayments\Api\Entities\Enums\Environment;
 use GlobalPayments\Api\Entities\Enums\PaymentMethodName;
 use GlobalPayments\Api\Entities\Enums\PaymentType;
 use GlobalPayments\Api\Entities\Enums\PhoneNumberType;
@@ -27,9 +26,8 @@ use GlobalPayments\Api\PaymentMethods\BNPL;
 use GlobalPayments\Api\ServiceConfigs\Gateways\GpApiConfig;
 use GlobalPayments\Api\Services\ReportingService;
 use GlobalPayments\Api\ServicesContainer;
+use GlobalPayments\Api\Tests\Data\BaseGpApiTestConfig;
 use GlobalPayments\Api\Utils\GenerationUtils;
-use GlobalPayments\Api\Utils\Logging\Logger;
-use GlobalPayments\Api\Utils\Logging\SampleRequestLogger;
 use PHPUnit\Framework\TestCase;
 
 class GpApiBNPLTest extends TestCase
@@ -39,7 +37,7 @@ class GpApiBNPLTest extends TestCase
     private $shippingAddress;
     private $billingAddress;
 
-    public function setup()
+    public function setup(): void
     {
         ServicesContainer::configureService($this->setUpConfig());
 
@@ -71,16 +69,9 @@ class GpApiBNPLTest extends TestCase
         $this->shippingAddress->countryCode = 'US';
     }
 
-    public function setUpConfig()
+    public function setUpConfig(): GpApiConfig
     {
-        $config = new GpApiConfig();
-        $config->appId = 'uAGII1ChGyRk1CqzJBsOOGBTrDMMYjAp';
-        $config->appKey = 'hgLnF6Fh7BIt3TDw';
-        $config->environment = Environment::TEST;
-        $config->channel = Channel::CardNotPresent;
-        $config->requestLogger = new SampleRequestLogger(new Logger("logs"));
-
-        return $config;
+        return BaseGpApiTestConfig::gpApiSetupConfig(Channel::CardNotPresent);
     }
 
     public function testBNPL_FullCycle()
@@ -314,6 +305,46 @@ class GpApiBNPLTest extends TestCase
         $this->assertEquals(TransactionStatus::CAPTURED, $captureTrn->responseMessage);
     }
 
+    public function testBNPL_KlarnaProvider_Refund()
+    {
+        $this->paymentMethod->bnplType = BNPLType::KLARNA;
+        $customer = $this->setCustomerData();
+        $products = $this->setProductList();
+
+        $transaction = $this->paymentMethod->authorize(550)
+            ->withCurrency($this->currency)
+            ->withProductData($products)
+            ->withAddress($this->shippingAddress, AddressType::SHIPPING)
+            ->withAddress($this->billingAddress, AddressType::BILLING)
+            ->withCustomerData($customer)
+            ->execute();
+
+        $this->assertNotNull($transaction);
+        $this->assertEquals('SUCCESS', $transaction->responseCode);
+        $this->assertEquals(TransactionStatus::INITIATED, $transaction->responseMessage);
+        $this->assertNotNull($transaction->bnplResponse->redirectUrl);
+
+        fwrite(STDERR, print_r($transaction->bnplResponse->redirectUrl, TRUE));
+
+        sleep(45);
+
+        $captureTrn = $transaction->capture()->execute();
+
+        $this->assertNotNull($captureTrn);
+        $this->assertEquals('SUCCESS', $captureTrn->responseCode);
+        $this->assertEquals(TransactionStatus::CAPTURED, $captureTrn->responseMessage);
+
+        sleep(15);
+
+        $trnRefund = $captureTrn->refund(100)
+            ->withCurrency($this->currency)
+            ->execute();
+
+        $this->assertNotNull($trnRefund);
+        $this->assertEquals('SUCCESS', $trnRefund->responseCode);
+        $this->assertEquals(TransactionStatus::CAPTURED, $trnRefund->responseMessage);
+    }
+
     public function testBNPL_ClearPayProvider()
     {
         $this->paymentMethod->bnplType = BNPLType::CLEARPAY;
@@ -401,6 +432,46 @@ class GpApiBNPLTest extends TestCase
         $this->assertNotNull($captureTrn);
         $this->assertEquals('SUCCESS', $captureTrn->responseCode);
         $this->assertEquals(TransactionStatus::CAPTURED, $captureTrn->responseMessage);
+    }
+
+    public function testBNPL_ClearPayProvider_Refund()
+    {
+        $this->paymentMethod->bnplType = BNPLType::CLEARPAY;
+        $customer = $this->setCustomerData();
+        $products = $this->setProductList();
+
+        $transaction = $this->paymentMethod->authorize(550)
+            ->withCurrency($this->currency)
+            ->withProductData($products)
+            ->withAddress($this->shippingAddress, AddressType::SHIPPING)
+            ->withAddress($this->billingAddress, AddressType::BILLING)
+            ->withCustomerData($customer)
+            ->execute();
+
+        $this->assertNotNull($transaction);
+        $this->assertEquals('SUCCESS', $transaction->responseCode);
+        $this->assertEquals(TransactionStatus::INITIATED, $transaction->responseMessage);
+        $this->assertNotNull($transaction->bnplResponse->redirectUrl);
+
+        fwrite(STDERR, print_r($transaction->bnplResponse->redirectUrl, TRUE));
+
+        sleep(45);
+
+        $captureTrn = $transaction->capture()->execute();
+
+        $this->assertNotNull($captureTrn);
+        $this->assertEquals('SUCCESS', $captureTrn->responseCode);
+        $this->assertEquals(TransactionStatus::CAPTURED, $captureTrn->responseMessage);
+
+        sleep(15);
+
+        $trnRefund = $captureTrn->refund(550)
+            ->withCurrency($this->currency)
+            ->execute();
+
+        $this->assertNotNull($trnRefund);
+        $this->assertEquals('SUCCESS', $trnRefund->responseCode);
+        $this->assertEquals(TransactionStatus::CAPTURED, $trnRefund->responseMessage);
     }
 
     public function testBNPL_InvalidStatusForCapture_NoRedirect()
@@ -522,9 +593,9 @@ class GpApiBNPLTest extends TestCase
                 ->execute();
         } catch (GatewayException $e) {
             $exceptionCaught = true;
-            $this->assertEquals('50002', $e->responseCode);
             $this->assertEquals("Status Code: SYSTEM_ERROR - Bad Gateway",
                 $e->getMessage());
+            $this->assertEquals('50002', $e->responseCode);
         } finally {
             $this->assertTrue($exceptionCaught);
         }
@@ -747,9 +818,9 @@ class GpApiBNPLTest extends TestCase
                 ->execute();
         } catch (GatewayException $e) {
             $exceptionCaught = true;
-            $this->assertEquals('50002', $e->responseCode);
             $this->assertEquals("Status Code: SYSTEM_ERROR - Bad Gateway",
                 $e->getMessage());
+            $this->assertEquals('50002', $e->responseCode);
         } finally {
             $this->assertTrue($exceptionCaught);
         }

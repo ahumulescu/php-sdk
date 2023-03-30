@@ -4,7 +4,71 @@
 
 # Changelog
 
-## Latest version
+## Latest Version
+#### Enhancements:
+- Add payer information on Transaction object
+- GP-API: Update request for boarding merchants
+- GP-ECOM: Change recurring entity return type
+
+## v6.1.7 (03/09/2023)
+#### Bug Fixes:
+- GP-API: fix issue on PHP8.1 with strtoupper and str_pad
+- GP-API: fix unit tests on PHP8.1
+
+## v6.1.6 (03/07/2023)
+#### Bug Fixes:
+- Portico/Heartland: fix 'withStartDate()' reporting method
+
+#### Enhancements:
+- Portico/Heartland: improvements to GooglePay and ApplePay token handling
+- Portico/Heartland: simple GooglePay example added
+
+## v6.1.5 (02/28/2023)
+#### Bug Fixes:
+- TSYS/Merchantware: correction to service endpoints
+
+## v6.1.4 (02/21/2023)
+#### Enhancements:
+- GP-API: Add account_id on all requests
+
+#### Bug Fixes:
+- PAX A35: Fixed device-response handling
+
+## v6.1.3 (02/16/2023)
+#### Enhancements:
+- GP-API: Create open banking transactions
+- GPI Transactions: Reporting tests refactor
+
+## v6.1.2 (02/13/2023)
+#### Enhancements:
+- GP-API: BNPL unit tests update
+
+## v6.1.1 (02/09/2023)
+#### Bug Fixes:
+- Portico Gateway: fix DigitalPaymentToken handling
+
+## v6.1.0 (02/02/2023)
+#### Enhancements:
+- GP-API: add risk assessment feature
+- Refacto the Secure3DBuilder
+- GP-API: update CTP transaction request
+
+## v6.0.6 (01/26/2023)
+#### Enhancements:
+- GPI Transactions : added support for credit, ach & reporting transactions 
+- GP-API: add to generateXGPSignature to GenerationUtils
+- Portico Gateway: Fix incorrect date handling in schedule response
+
+## v6.0.5 (01/12/2023)
+#### Enhancements:
+- GP-API: add exemption status on "/transaction" endpoint
+- Add enum classes: HostedPaymentMethods, IntervalToExpire
+- Portico: added support for SDKNameVersion field
+
+#### Bug Fixes:
+- GP-API: Fix issue on mapping o transaction report
+
+## v6.0.4 (12/13/2022)
 #### Enhancements:
 - GP-API: Add BNPL feature
 - GP-API: Click-to-Pay

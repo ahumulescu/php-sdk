@@ -17,7 +17,7 @@ class ServiceEndpoints extends Enum
     const TABLE_SERVICE_PRODUCTION = "https://www.freshtxt.com/api31/";
     const TABLE_SERVICE_TEST = "https://www.freshtxt.com/api31/";
     const MERCHANTWARE_TEST = "https://ps1.merchantware.net/Merchantware/ws/";
-    const MERCHANTWARE_PRODUCTION = "";
+    const MERCHANTWARE_PRODUCTION = "https://ps1.merchantware.net/Merchantware/ws/";
     const TRANSIT_TEST = "https://stagegw.transnox.com/servlets/TransNox_API_Server";
     const TRANSIT_PRODUCTION = "https://gateway.transit-pass.com/servlets/TransNox_API_Server/";
     const PROPAY_TEST = "https://xmltest.propay.com/API/PropayAPI.aspx";
@@ -28,4 +28,6 @@ class ServiceEndpoints extends Enum
     const GP_API_PRODUCTION = "https://apis.globalpay.com/ucp";
     const OPEN_BANKING_TEST = 'https://api.sandbox.globalpay-ecommerce.com/openbanking';
     const OPEN_BANKING_PRODUCTION = 'https://api.globalpay-ecommerce.com/openbanking';
+    const TRANSACTION_API_TEST = "https://api.pit.paygateway.com/transactions/";
+    const TRANSACTION_API_PROD = "https://api.paygateway.com/transactions";
 }

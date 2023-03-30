@@ -1,8 +1,11 @@
 <?php
 
+namespace Gateways\GpApiConnector;
+
 use PHPUnit\Framework\TestCase;
 use GlobalPayments\Api\Mapping\GpApiMapping;
 use \GlobalPayments\Api\Utils\StringUtils;
+use stdClass;
 
 class MappingTest extends TestCase
 {
@@ -154,7 +157,7 @@ class MappingTest extends TestCase
 
         if (isset($doc->system)) {
             $system = $doc->system;
-            $this->assertEquals($system->mid, $depositSummary->merchantNumber);
+            $this->assertEquals($system->mid, $depositSummary->merchantId);
             $this->assertEquals($system->hierarchy, $depositSummary->merchantHierarchy);
             $this->assertEquals($system->name, $depositSummary->merchantName);
             $this->assertEquals($system->dba, $depositSummary->merchantDbaName);

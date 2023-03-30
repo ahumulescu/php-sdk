@@ -6,15 +6,18 @@ use GlobalPayments\Api\Builders\AuthorizationBuilder;
 use GlobalPayments\Api\Builders\BaseBuilder;
 use GlobalPayments\Api\Entities\CustomerDocument;
 use GlobalPayments\Api\Entities\EncryptionData;
+use GlobalPayments\Api\Entities\Enums\BankPaymentType;
 use GlobalPayments\Api\Entities\Enums\CardType;
 use GlobalPayments\Api\Entities\Enums\Channel;
 use GlobalPayments\Api\Entities\Enums\DigitalWalletTokenFormat;
+use GlobalPayments\Api\Entities\Enums\EncyptedMobileType;
 use GlobalPayments\Api\Entities\Enums\EntryMethod;
 use GlobalPayments\Api\Entities\Enums\GatewayProvider;
 use GlobalPayments\Api\Entities\Enums\ManualEntryMethod;
 use GlobalPayments\Api\Entities\Enums\CaptureMode;
 use GlobalPayments\Api\Entities\Enums\PayLinkStatus;
 use GlobalPayments\Api\Entities\Enums\PaymentEntryMode;
+use GlobalPayments\Api\Entities\Enums\PaymentProvider;
 use GlobalPayments\Api\Entities\Enums\PaymentType;
 use GlobalPayments\Api\Entities\Enums\PhoneNumberType;
 use GlobalPayments\Api\Entities\Enums\TransactionModifier;
@@ -27,8 +30,11 @@ use GlobalPayments\Api\Entities\IRequestBuilder;
 use GlobalPayments\Api\Entities\PayLinkData;
 use GlobalPayments\Api\Entities\PhoneNumber;
 use GlobalPayments\Api\Entities\Product;
+use GlobalPayments\Api\Gateways\OpenBankingProvider;
 use GlobalPayments\Api\Mapping\EnumMapping;
+use GlobalPayments\Api\PaymentMethods\BankPayment;
 use GlobalPayments\Api\PaymentMethods\BNPL;
+use GlobalPayments\Api\PaymentMethods\Credit;
 use GlobalPayments\Api\PaymentMethods\CreditCardData;
 use GlobalPayments\Api\PaymentMethods\CreditTrackData;
 use GlobalPayments\Api\PaymentMethods\DebitTrackData;
@@ -87,6 +93,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                     $verb = 'POST';
                     $requestData = [];
                     $requestData['account_name'] = $config->accessTokenInfo->tokenizationAccountName;
+                    $requestData['account_id'] = $config->accessTokenInfo->tokenizationAccountID;
                     $requestData['name'] = $builder->description ? $builder->description : "";
                     $requestData['reference'] = $builder->clientTransactionId ?
                         $builder->clientTransactionId : GenerationUtils::generateOrderId();
@@ -98,7 +105,12 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                     $builderCard = $builder->paymentMethod;
                     $card->number = $builderCard->number;
                     $card->expiry_month = (string) $builderCard->expMonth;
-                    $card->expiry_year = substr(str_pad((string) $builderCard->expYear, 4, '0', STR_PAD_LEFT), 2, 2);
+                    $card->expiry_year = !empty($builderCard->expYear) ?
+                        substr(
+                            str_pad((string) $builderCard->expYear, 4, '0', STR_PAD_LEFT),
+                            2,
+                            2
+                        ) : null;
                     $card->cvv = $builderCard->cvn;
                     $requestData['card'] = $card;
                 } else {
@@ -111,6 +123,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                 $endpoint = GpApiRequest::DCC_ENDPOINT;
                 $verb = 'POST';
                 $requestData['account_name'] = $config->accessTokenInfo->transactionProcessingAccountName;
+                $requestData['account_id'] = $config->accessTokenInfo->transactionProcessingAccountID;
                 $requestData['channel'] = $config->channel;
                 $requestData['amount'] = StringUtils::toNumeric($builder->amount);
                 $requestData['currency'] = $builder->currency;
@@ -126,6 +139,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                     $endpoint = GpApiRequest::PAYLINK_ENDPOINT;
                     $verb = 'POST';
                     $requestData['account_name'] = $config->accessTokenInfo->transactionProcessingAccountName;
+                    $requestData['account_id'] = $config->accessTokenInfo->transactionProcessingAccountID;
                     $requestData['type'] = $payLink->type;
                     $requestData['usage_mode'] = $payLink->usageMode;
                     $requestData['usage_limit'] = (string) $payLink->usageLimit;
@@ -164,6 +178,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
     {
         $requestBody = [];
         $requestBody['account_name'] = $config->accessTokenInfo->transactionProcessingAccountName;
+        $requestBody['account_id'] = $config->accessTokenInfo->transactionProcessingAccountID;
         $requestBody['channel'] = $config->channel;
         $requestBody['reference'] = !empty($builder->clientTransactionId) ?
             $builder->clientTransactionId : GenerationUtils::getGuid();
@@ -181,6 +196,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
 
         $requestBody = [];
         $requestBody['account_name'] = $config->accessTokenInfo->transactionProcessingAccountName;
+        $requestBody['account_id'] = $config->accessTokenInfo->transactionProcessingAccountID;
         $requestBody['channel'] = $config->channel;
         $requestBody['country'] = $config->country;
         $requestBody['type'] = ($builder->transactionType == TransactionType::REFUND ?
@@ -191,6 +207,12 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
         $requestBody['currency'] = $builder->currency;
         $requestBody['reference'] = !empty($builder->clientTransactionId) ?
             $builder->clientTransactionId : GenerationUtils::getGuid();
+        if (
+            $builder->paymentMethod instanceof Credit &&
+            $builder->paymentMethod->mobileType == EncyptedMobileType::CLICK_TO_PAY
+        ) {
+            $requestBody['masked'] = $builder->maskedDataResponse === true ? 'YES' : 'NO';
+        }
         $requestBody['description'] = $builder->description;
         $requestBody['order'] = ['reference' => $builder->orderId];
         $requestBody['gratuity_amount'] = StringUtils::toNumeric($builder->gratuity);
@@ -215,12 +237,12 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
         }
         if ($builder->paymentMethod instanceof AlternativePaymentMethod || $builder->paymentMethod instanceof BNPL) {
             $this->setOrderInformation($builder, $requestBody);
-
-            $requestBody['notifications'] = [
-                'return_url' => $builder->paymentMethod->returnUrl,
-                'status_url' => $builder->paymentMethod->statusUpdateUrl,
-                'cancel_url' => $builder->paymentMethod->cancelUrl
-            ];
+        }
+        if ($builder->paymentMethod instanceof AlternativePaymentMethod ||
+            $builder->paymentMethod instanceof BNPL ||
+            $builder->paymentMethod instanceof BankPayment
+        ) {
+            $this->setNotificationUrls($requestBody);
         }
         if (!empty($builder->storedCredential)) {
             $initiator = EnumMapping::mapStoredCredentialInitiator(GatewayProvider::GP_API, $builder->storedCredential->initiator);
@@ -255,15 +277,15 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
             case AlternativePaymentMethod::class:
                 $payer['home_phone'] = [
                     'country_code' => !empty($builder->homePhone) ?
-                        StringUtils::validateToNumber($builder->homePhone->countryCode): null,
+                        StringUtils::validateToNumber($builder->homePhone->countryCode) : null,
                     'subscriber_number' => !empty($builder->homePhone) ?
-                        StringUtils::validateToNumber($builder->homePhone->number): null
+                        StringUtils::validateToNumber($builder->homePhone->number) : null
                 ];
                 $payer['work_phone'] = [
                     'country_code' => !empty($builder->workPhone) ?
-                        StringUtils::validateToNumber($builder->workPhone->countryCode): null,
+                        StringUtils::validateToNumber($builder->workPhone->countryCode) : null,
                     'subscriber_number' => !empty($builder->workPhone) ?
-                        StringUtils::validateToNumber($builder->workPhone->number): null,
+                        StringUtils::validateToNumber($builder->workPhone->number) : null,
                 ];
                 break;
             case ECheck::class:
@@ -305,9 +327,9 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                 if (isset($builder->customerData->phone)) {
                     $payer['contact_phone'] = [
                         'country_code' => !empty($builder->customerData->phone->countryCode) ?
-                            StringUtils::validateToNumber($builder->customerData->phone->countryCode): null,
+                            StringUtils::validateToNumber($builder->customerData->phone->countryCode) : null,
                         'subscriber_number' => !empty($builder->customerData->phone->number) ?
-                            StringUtils::validateToNumber($builder->customerData->phone->number): null,
+                            StringUtils::validateToNumber($builder->customerData->phone->number) : null,
                     ];
                 }
                 if (!empty($builder->customerData->documents)) {
@@ -365,7 +387,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
      */
     private function createPaymentMethodParam($builder, $config)
     {
-        /** @var CreditCardData|CreditTrackData|DebitTrackData|ECheck|AlternativePaymentMethod|BNPL $paymentMethodContainer */
+        /** @var CreditCardData|CreditTrackData|DebitTrackData|ECheck|AlternativePaymentMethod|BNPL|BankPayment $paymentMethodContainer */
         $paymentMethodContainer = $builder->paymentMethod;
         $paymentMethod = new PaymentMethod();
         $paymentMethod->entry_mode = $this->getEntryMode($builder, $config->channel);
@@ -380,7 +402,13 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                         $builder->customerData->deviceFingerPrint : null);
                 $secureEcom = $paymentMethodContainer->threeDSecure;
                 if (!empty($secureEcom)) {
-					$paymentMethod->authentication = ['id' => $secureEcom->serverTransactionId];
+                    $paymentMethod->authentication =
+                        [
+                            'id' => $secureEcom->serverTransactionId,
+                            'three_ds' => [
+                                'exempt_status' => $secureEcom->exemptStatus
+                            ]
+                        ];
                 }
                 break;
             case ECheck::class:
@@ -398,15 +426,15 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                         'code' => $paymentMethodContainer->routingNumber,
                         'name' => $paymentMethodContainer->bankName,
                         'address' =>
-                            [
-                                'line_1' => $paymentMethodContainer->bankAddress->streetAddress1,
-                                'line_2' => $paymentMethodContainer->bankAddress->streetAddress2,
-                                'line_3' => $paymentMethodContainer->bankAddress->streetAddress3,
-                                'city' => $paymentMethodContainer->bankAddress->city,
-                                'postal_code' => $paymentMethodContainer->bankAddress->postalCode,
-                                'state' => $paymentMethodContainer->bankAddress->state,
-                                'country' => $paymentMethodContainer->bankAddress->countryCode
-                            ]
+                        [
+                            'line_1' => $paymentMethodContainer->bankAddress->streetAddress1,
+                            'line_2' => $paymentMethodContainer->bankAddress->streetAddress2,
+                            'line_3' => $paymentMethodContainer->bankAddress->streetAddress3,
+                            'city' => $paymentMethodContainer->bankAddress->city,
+                            'postal_code' => $paymentMethodContainer->bankAddress->postalCode,
+                            'state' => $paymentMethodContainer->bankAddress->state,
+                            'country' => $paymentMethodContainer->bankAddress->countryCode
+                        ]
                     ]
                 ];
 
@@ -438,7 +466,27 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                     'address_override_mode' => !empty($paymentMethodContainer->addressOverrideMode) ?
                         $paymentMethodContainer->addressOverrideMode : null
                 ];
-
+                return $paymentMethod;
+            case BankPayment::class:
+                $paymentMethod->apm = [
+                    'provider' => PaymentProvider::OPEN_BANKING,
+                    'countries' => $paymentMethodContainer->countries ?? [],
+                ];
+                $bankPaymentType = !empty($paymentMethodContainer->bankPaymentType) ?
+                    $paymentMethodContainer->bankPaymentType : OpenBankingProvider::getBankPaymentType($builder->currency);
+                $paymentMethod->bank_transfer = [
+                    'account_number' => $bankPaymentType == BankPaymentType::FASTERPAYMENTS ?
+                        $paymentMethodContainer->accountNumber : '',
+                    'iban' => $bankPaymentType == BankPaymentType::SEPA ? $paymentMethodContainer->iban : '',
+                    'bank' => [
+                        'code' => $paymentMethodContainer->sortCode,
+                        'name' => $paymentMethodContainer->accountName
+                    ],
+                    'remittance_reference' => [
+                        'type' => $builder->remittanceReferenceType,
+                        'value' => $builder->remittanceReferenceValue
+                    ]
+                ];
                 return $paymentMethod;
             case BNPL::class:
                 if (!empty($builder->customerData->firstName) && !empty($builder->customerData->lastName)) {
@@ -468,15 +516,28 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
             /* digital wallet */
             switch ($builder->transactionModifier) {
                 case TransactionModifier::ENCRYPTED_MOBILE:
-                    $digitalWallet['payment_token'] = !empty($paymentMethodContainer->token) ?
-                        json_decode(preg_replace('/(\\\)(\w)/', '${1}${1}${2}', $paymentMethodContainer->token)) : null;
+                    $paymentToken = null;
+                    switch ($paymentMethodContainer->mobileType){
+                        case EncyptedMobileType::CLICK_TO_PAY:
+                            $paymentToken = ['data' => $paymentMethodContainer->token];
+                            break;
+                        default:
+                            $paymentToken = !empty($paymentMethodContainer->token) ?
+                                json_decode(preg_replace('/(\\\)(\w)/', '${1}${1}${2}', $paymentMethodContainer->token)) : null;
+                    }
+                    $digitalWallet['payment_token'] = $paymentToken;
                     break;
                 case TransactionModifier::DECRYPTED_MOBILE:
                     $digitalWallet['token'] = !empty($paymentMethodContainer->token) ?
                         $paymentMethodContainer->token : null;
                     $digitalWallet['token_format'] = DigitalWalletTokenFormat::CARD_NUMBER;
                     $digitalWallet['expiry_month'] = (string) $paymentMethodContainer->expMonth;
-                    $digitalWallet['expiry_year'] = substr(str_pad($paymentMethodContainer->expYear, 4, '0', STR_PAD_LEFT), 2, 2);
+                    $digitalWallet['expiry_year'] = !empty($paymentMethodContainer->expYear) ?
+                        substr(
+                            str_pad($paymentMethodContainer->expYear, 4, '0', STR_PAD_LEFT),
+                            2,
+                            2
+                        ) : null;
                     $digitalWallet['cryptogram'] = $paymentMethodContainer->cryptogram;
                     $digitalWallet['eci'] = !empty($paymentMethodContainer->eci) ?
                         $paymentMethodContainer->eci : $this->getEciCode($paymentMethodContainer);
@@ -515,8 +576,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
             return $paymentMethod->eci;
         }
         $eciCode = null;
-        switch (CardUtils::getBaseCardType($paymentMethod->getCardType()))
-        {
+        switch (CardUtils::getBaseCardType($paymentMethod->getCardType())) {
             case CardType::VISA:
             case CardType::AMEX:
                 $eciCode = '05';
@@ -565,7 +625,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
                 if ($builder->paymentMethod->readerPresent === true) {
                     return PaymentEntryMode::ECOM;
                 }
-                if(
+                if (
                     $builder->paymentMethod->readerPresent === false &&
                     !is_null($builder->paymentMethod->entryMethod)
                 ) {
@@ -605,6 +665,15 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
         }
 
         return CaptureMode::AUTO;
+    }
+
+    private function setNotificationUrls(&$requestBody)
+    {
+        $requestBody['notifications'] = [
+            'return_url' => $this->builder->paymentMethod->returnUrl ?? null,
+            'status_url' => $this->builder->paymentMethod->statusUpdateUrl ?? null,
+            'cancel_url' => $this->builder->paymentMethod->cancelUrl ?? null
+        ];
     }
 
     private function setOrderInformation($builder, &$requestBody)
@@ -732,7 +801,7 @@ class GpApiAuthorizationRequestBuilder implements IRequestBuilder
         if (!empty($this->builder->fraudRules)) {
             foreach ($this->builder->fraudRules as $fraudRule) {
                 $rules[] = [
-                    'reference'=> $fraudRule->key,
+                    'reference' => $fraudRule->key,
                     'mode' => $fraudRule->mode
                 ];
             }

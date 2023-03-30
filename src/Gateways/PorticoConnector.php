@@ -4,6 +4,7 @@ namespace GlobalPayments\Api\Gateways;
 
 use DOMDocument;
 use DOMElement;
+use Exception;
 use GlobalPayments\Api\Builders\{
     AuthorizationBuilder,
     BaseBuilder,
@@ -132,6 +133,18 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
      * @var string
      */
     public $clientTransactionId;
+
+    /**
+     * Indicates the version of this SDK used to send a gateway request.
+     * 
+     * @var string
+     */
+    public $sdkNameVersion;
+
+    public function supportsOpenBanking() : bool
+    {
+        return false;
+    }
 
     /**
      * {@inheritdoc}
@@ -326,10 +339,10 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
 
             if (empty($builder->paymentMethod->token)) {
                 $accountInfo = $xml->createElement('AccountInfo');
-                $accountInfo->appendChild($xml->createElement('RoutingNumber', $builder->paymentMethod->routingNumber));
-                $accountInfo->appendChild($xml->createElement('AccountNumber', $builder->paymentMethod->accountNumber));
-                $accountInfo->appendChild($xml->createElement('CheckNumber', $builder->paymentMethod->checkNumber));
-                $accountInfo->appendChild($xml->createElement('MICRData', $builder->paymentMethod->micrNumber));
+                $accountInfo->appendChild($xml->createElement('RoutingNumber', $builder->paymentMethod->routingNumber ?? ''));
+                $accountInfo->appendChild($xml->createElement('AccountNumber', $builder->paymentMethod->accountNumber ?? ''));
+                $accountInfo->appendChild($xml->createElement('CheckNumber', $builder->paymentMethod->checkNumber ?? ''));
+                $accountInfo->appendChild($xml->createElement('MICRData', $builder->paymentMethod->micrNumber ?? ''));
                 $accountInfo->appendChild(
                     $xml->createElement(
                         'AccountType',
@@ -1203,6 +1216,15 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
                 $xml->createElement('VersionNbr', $this->versionNumber)
             );
         }
+        if (!empty($this->sdkNameVersion)) {
+            $header->appendChild(
+                $xml->createElement('SDKNameVersion', $this->sdkNameVersion)
+            );
+        } else {
+            $header->appendChild(
+                $xml->createElement('SDKNameVersion', 'php;version=' . $this->getReleaseVersion())
+            );         
+        }
 
         $version->appendChild($header);
         $transactionElement = $xml->createElement('Transaction');
@@ -2015,10 +2037,10 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
 
         if ($builder->billingAddress !== null) {
             $holder->appendChild(
-                $xml->createElement($isCheck ? 'Address1' : 'CardHolderAddr', htmlentities($builder->billingAddress->streetAddress1))
+                $xml->createElement($isCheck ? 'Address1' : 'CardHolderAddr', htmlentities($builder->billingAddress->streetAddress1 ?? ''))
             );
             $holder->appendChild(
-                $xml->createElement($isCheck ? 'City' : 'CardHolderCity', htmlentities($builder->billingAddress->city))
+                $xml->createElement($isCheck ? 'City' : 'CardHolderCity', htmlentities($builder->billingAddress->city ?? ''))
             );
             $holder->appendChild(
                 $xml->createElement($isCheck ? 'State' : 'CardHolderState', $builder->billingAddress->getProvince())
@@ -2324,11 +2346,7 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
     private function hydrateWalletData(DOMDocument $xml, BaseBuilder $builder, $block1, $cardData)
     {
         //wallet data
-        if (
-            $builder->paymentMethod->mobileType == MobilePaymentMethodType::APPLEPAY
-            || $builder->paymentMethod->mobileType == MobilePaymentMethodType::GOOGLEPAY
-            && $this->isAppleOrGooglePay($builder->paymentMethod->paymentSource)
-        ) {
+        if ($this->isAppleOrGooglePay($builder->paymentMethod->paymentSource)) {
             $walletData  = $xml->createElement('WalletData');
 
             if (!empty($builder->paymentMethod->threeDSecure->cavv)) {
@@ -2340,10 +2358,10 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
             if (!empty($builder->paymentMethod->paymentSource)) {
                 $walletData->appendChild($xml->createElement('PaymentSource', $builder->paymentMethod->paymentSource));
             }
-
-            if ($builder->paymentMethod->mobileType) {
-                $token = $this->toFormatToken($builder->paymentMethod->token);
-                $walletData->appendChild($xml->createElement('DigitalPaymentToken', $token));
+            if (!empty($builder->paymentMethod->token)) {
+                $token = $builder->paymentMethod->token;
+                $dpt = $walletData->appendChild($xml->createElement('DigitalPaymentToken'));
+                $dpt->appendChild($xml->createCDATASection($token));
                 $block1->removeChild($cardData);
             }
 
@@ -2388,6 +2406,30 @@ class PorticoConnector extends XmlGateway implements IPaymentGateway
             return true;
         }
         return false;
+    }
+
+    /**
+     * Parses and returns the release number (version number) from 'metadata.xml'
+     * 
+     * @return string 
+     */
+    private function getReleaseVersion() : string
+    {
+        try {
+            $fileContents = file_get_contents(
+                dirname(__DIR__, 2) . '/metadata.xml'
+            );
+            
+            $posOne = strpos($fileContents, "<releaseNumber>");
+            $posTwo = strpos($fileContents, "</releaseNumber>");
+            
+            return substr($fileContents, $posOne + 15, $posTwo - $posOne - 15);
+        } catch(Exception $e) {
+            trigger_error(
+                "Unable to append SDK version to request header. Inner Exception:"
+                . PHP_EOL . $e->getMessage()
+            );
+        }        
     }
 
     /**

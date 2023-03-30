@@ -16,6 +16,8 @@ use GlobalPayments\Api\PaymentMethods\TransactionReference;
  *
  * @property string $authorizationCode The authorization code provided by the issuer.
  * @property string $clientTransactionId The client transaction ID supplied in the request.
+ * @property string $checkSaleId The check sale ID supplied in the request.
+ * @property string $checkRefundId The check refund ID supplied in the request.
  * @property string $orderId The order ID supplied in the request.
  * @property PaymentMethodType $paymentMethodType The type of payment made in the request.
  * @property string $transactionId The transaction ID.
@@ -71,9 +73,18 @@ class Transaction
      *
      * @var string
      */
+    public $cardSecurityResponse;
+
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->brand
+     * The type of card used in the transaction.
+     *
+     * @var string
+     */
     public $cardType;
 
     /**
+     * @deprecated  Will soon be replaced with $cardDetails->maskedNumberLast4
      * The last four digits of the card number used in
      * the transaction.
      *
@@ -138,6 +149,13 @@ class Transaction
      * @var int
      */
     public $multiCaptureSequence;
+
+    /**
+     * The original Transaction Type holds additional flag of type.
+     *
+     * @var string
+     */
+    public $originalTransactionType;
 
     /**
      * The remaining points on the account after the transaction.
@@ -219,7 +237,7 @@ class Transaction
      * The transaction reference.
      *
      * @internal
-     * @var string
+     * @var TransactionReference
      */
     public $transactionReference;
 
@@ -230,10 +248,10 @@ class Transaction
      * @var GiftCard
      */
     public $giftCard;
-    
+
     /** @var DccRateData */
     public $dccRateData;
-    
+
     /**
      * The Dcc Response
      *
@@ -241,7 +259,7 @@ class Transaction
      * @var FraudManagementResponse
      */
     public $fraudFilterResponse;
-    
+
     /**
      * The address verification service (AVS) address response code.
      *
@@ -250,18 +268,18 @@ class Transaction
     public $avsAddressResponse;
 
     public $customerReceipt;
-  
+
     public $merchantReceipt;
-  
+
     public $transactionKey;
-  
+
     /*
      * Card on File field response
      * @var string
      *
      */
     public $cardBrandTransactionId;
-    
+
     /**
      * The response from Propay
      *
@@ -269,10 +287,29 @@ class Transaction
      */
     public $payFacData;
 
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->cardholderName
+     */
+    public $cardholderName;
+
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->cardNumber
+     */
     public $cardNumber;
 
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->maskedCardNumber
+     */
+    public $maskedCardNumber;
+
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->cardExpMonth
+     */
     public $cardExpMonth;
 
+    /**
+     * @deprecated  Will soon be replaced with $cardDetails->cardExpYear
+     */
     public $cardExpYear;
 
     /**
@@ -307,6 +344,12 @@ class Transaction
 
     /** @var CardIssuerResponse $cardIssuerResponse */
     public $cardIssuerResponse;
+
+    /** @var PayerDetails */
+    public $payerDetails;
+
+    /** @var Card */
+    public $cardDetails;
 
     /**
      * Creates a `Transaction` object from a stored transaction ID.
@@ -388,11 +431,11 @@ class Transaction
         $builder = (new ManagementBuilder(TransactionType::CAPTURE))
             ->withPaymentMethod($this->transactionReference)
             ->withAmount($amount);
-            
+
         if ($this->multiCapture) {
             $builder->withMultiCapture($this->multiCaptureSequence, $this->multiCapturePaymentCount);
         }
-        
+
         return $builder;
     }
 
@@ -519,6 +562,16 @@ class Transaction
                     return $this->transactionReference->clientTransactionId;
                 }
                 return null;
+            case 'checkRefundId':
+                if ($this->transactionReference !== null) {
+                    return $this->transactionReference->checkRefundId;
+                }
+                return null;
+            case 'checkSaleId':
+                if ($this->transactionReference !== null) {
+                    return $this->transactionReference->checkSaleId;
+                }
+                return null;
             case 'orderId':
                 if ($this->transactionReference !== null) {
                     return $this->transactionReference->orderId;
@@ -563,6 +616,8 @@ class Transaction
             'authorizationId',
             'paymentMethodType',
             'clientTransactionId',
+            'checkRefundId',
+            'checkSaleId',
             'alternativePaymentResponse',
             'bnplResponse'
         ]) || isset($this->{$name});
@@ -582,6 +637,18 @@ class Transaction
                     $this->transactionReference = new TransactionReference();
                 }
                 $this->transactionReference->clientTransactionId = $value;
+                return;
+            case 'checkRefundId':
+                if (!$this->transactionReference instanceof TransactionReference) {
+                    $this->transactionReference = new TransactionReference();
+                }
+                $this->transactionReference->checkRefundId = $value;
+                return;
+            case 'checkSaleId':
+                if (!$this->transactionReference instanceof TransactionReference) {
+                    $this->transactionReference = new TransactionReference();
+                }
+                $this->transactionReference->checkSaleId = $value;
                 return;
             case 'orderId':
                 if (!$this->transactionReference instanceof TransactionReference) {

@@ -55,7 +55,7 @@ class CreditCardNotPresentTest extends TestCase
         $this->idempotencyKey = GenerationUtils::getGuid();
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         BaseGpApiTestConfig::resetGpApiConfig();
     }
@@ -77,6 +77,7 @@ class CreditCardNotPresentTest extends TestCase
         $this->assertNotNull($response);
         $this->assertEquals('SUCCESS', $response->responseCode);
         $this->assertEquals(TransactionStatus::CAPTURED, $response->responseMessage);
+        $this->assertNull($response->payerDetails);
     }
 
     public function testCreditSaleWithFingerPrint()
@@ -700,7 +701,7 @@ class CreditCardNotPresentTest extends TestCase
         }
     }
 
-    public function testCreditVerifyx()
+    public function testCreditVerify()
     {
         $response = $this->card->verify()
             ->withCurrency($this->currency)

@@ -57,7 +57,7 @@ class GpApiApmTest extends TestCase
         return BaseGpApiTestConfig::gpApiSetupConfig(Channel::CardNotPresent);
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         BaseGpApiTestConfig::resetGpApiConfig();
     }
@@ -331,7 +331,7 @@ class GpApiApmTest extends TestCase
         $order->hasInsurance = true;
         $order->description = 'Order description';
 
-        $response = $this->paymentMethod->charge(14)
+        $response = $this->paymentMethod->charge(29)
             ->withCurrency($this->currency)
             ->withDescription('New APM Uplift')
             ->withAddress($this->shippingAddress, AddressType::SHIPPING)

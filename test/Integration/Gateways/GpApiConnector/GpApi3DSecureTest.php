@@ -9,6 +9,7 @@ use GlobalPayments\Api\Entities\Enums\AuthenticationSource;
 use GlobalPayments\Api\Entities\Enums\ChallengeWindowSize;
 use GlobalPayments\Api\Entities\Enums\Channel;
 use GlobalPayments\Api\Entities\Enums\ColorDepth;
+use GlobalPayments\Api\Entities\Enums\ExemptStatus;
 use GlobalPayments\Api\Entities\Enums\ManualEntryMethod;
 use GlobalPayments\Api\Entities\Enums\MethodUrlCompletion;
 use GlobalPayments\Api\Entities\Enums\OrderTransactionType;
@@ -101,7 +102,7 @@ class GpApi3DSecureTest extends TestCase
         $this->browserData->userAgent = "Mozilla/5.0 (Windows NT 6.1; Win64, x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36";
     }
 
-    public static function tearDownAfterClass()
+    public static function tearDownAfterClass(): void
     {
         BaseGpApiTestConfig::resetGpApiConfig();
     }
@@ -879,5 +880,22 @@ class GpApi3DSecureTest extends TestCase
         $this->assertNotNull($response);
         $this->assertEquals('SUCCESS', $response->responseCode);
         $this->assertEquals(TransactionStatus::CAPTURED, $response->responseMessage);
+    }
+
+    public function testExemptionSaleTransaction()
+    {
+        $this->card->number = GpApi3DSTestCards::CARD_CHALLENGE_REQUIRED_V2_2;
+
+        $threeDS = new ThreeDSecure();
+        $threeDS->exemptStatus = ExemptStatus::LOW_VALUE;
+        $this->card->threeDSecure = $threeDS;
+        $response = $this->card->charge($this->amount)
+            ->withCurrency($this->currency)
+            ->execute();
+
+        $this->assertNotNull($response);
+        $this->assertEquals('SUCCESS', $response->responseCode);
+        $this->assertEquals(TransactionStatus::CAPTURED, $response->responseMessage);
+
     }
 }
